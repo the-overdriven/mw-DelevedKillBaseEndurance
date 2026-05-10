@@ -1,3 +1,5 @@
+local DEBUG = false
+
 local ui = require('openmw.ui')
 local I = require('openmw.interfaces')
 local types = require('openmw.types')
@@ -33,7 +35,7 @@ local function growEndurance(amount)
     local endurance = types.Actor.stats.attributes.endurance(selfObj)
     local newVal = endurance.base + amount
     endurance.base = newVal
-    print(string.format("[BattleExp] Endurance increased to %d", newVal))
+    if DEBUG then print(string.format("[BattleExp] Endurance increased to %d", newVal)) end
 end
 
 -- HP formula: e + (e^2 / 100)
@@ -55,7 +57,7 @@ local function setHealthFromEndurance()
     local ratio = health.current / health.base
     health.base = newMaxHP
     health.current = math.max(1, math.floor(ratio * newMaxHP))
-    print(string.format("[BattleExp] Endurance=%d -> MaxHP=%.1f", e, newMaxHP))
+    if DEBUG then print(string.format("[BattleExp] Endurance=%d -> MaxHP=%.1f", e, newMaxHP)) end
 end
 
 -- hide character level in char sheet
@@ -104,7 +106,7 @@ return {
 
             local xpNeededToLevelUp = reqForCurentLevel - currentProgress
 
-            print(string.format("[BattleExp] xpNeededToLevelUp %s", tostring(xpNeededToLevelUp)))
+            if DEBUG then print(string.format("[BattleExp] xpNeededToLevelUp %s", tostring(xpNeededToLevelUp))) end
 
             if dynamicXP >= xpNeededToLevelUp then
                 local levelBefore = SF.getSkillStat(skillId).base
@@ -143,6 +145,6 @@ return {
 }
 
 -- TODO:
--- who is the killer?
+-- detect player's summons as killers
 -- drain/fortify works?
 -- Heavy armor, medium armor and spear are governed by strength
