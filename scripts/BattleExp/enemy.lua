@@ -23,6 +23,15 @@ local function isPlayerAlly(actor)
     return package.target and types.Player.objectIsInstance(package.target)
 end
 
+local function getEnemyName(object)
+    if types.NPC.objectIsInstance(object) then
+        return types.NPC.record(object).name
+    elseif types.Creature.objectIsInstance(object) then
+        return types.Creature.record(object).name
+    end
+    return "Unknown Enemy"
+end
+
 return {
     eventHandlers = {
         Died = function()
@@ -44,13 +53,14 @@ return {
                 return
             end
             local enemyLevel = types.Actor.stats.level(self.object).current
-            if DEBUG then print(string.format("[BattleExp] enemyLevel: %d", enemyLevel)) end
+            local enemyName = getEnemyName(self.object)
+            local payload = { level = enemyLevel, name = enemyName }
             if isPlayer then
-                lastAttacker:sendEvent('GrantEnduranceReward', { level = enemyLevel })
+                lastAttacker:sendEvent('GrantEnduranceReward', payload)
             else
                 for _, actor in ipairs(nearby.actors) do
                     if types.Player.objectIsInstance(actor) then
-                        actor:sendEvent('GrantEnduranceReward', { level = enemyLevel })
+                        actor:sendEvent('GrantEnduranceReward', payload)
                         break
                     end
                 end

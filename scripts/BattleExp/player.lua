@@ -41,8 +41,8 @@ end
 -- HP formula: e + (e^2 / 100)
 -- 30 endurance = 39 hp (9 HP more than in vanilla)
 -- 50 endurance = 75 hp (15 HP more than in vanilla)
--- 62 endurance = 100 hp (corresponds to ~10 lvl)
--- 100 endurance = 200 hp (corresponds to ~20 lvl)
+-- 62 endurance = 100 hp (corresponds to ~10 lvl orc)
+-- 100 endurance = 200 hp (corresponds to ~20 lvl orc)
 local function calcMaxHP(endurance)
     return endurance + (endurance * endurance / 100)
 end
@@ -53,10 +53,7 @@ local function setHealthFromEndurance()
     local e = types.Actor.stats.attributes.endurance(selfObj).base
     local newMaxHP = calcMaxHP(e)
     local health = types.Actor.stats.dynamic.health(selfObj)
-    -- Preserve current HP ratio so the player doesn't suddenly die or fully heal
-    local ratio = health.current / health.base
     health.base = newMaxHP
-    health.current = math.max(1, math.floor(ratio * newMaxHP))
     if DEBUG then print(string.format("[BattleExp] Endurance=%d -> MaxHP=%.1f", e, newMaxHP)) end
 end
 
@@ -95,6 +92,7 @@ return {
         end,
         GrantEnduranceReward = function(data)
             local enemyLevel = data and data.level or 1
+            local enemyName = data and data.name
             local baseXPFactor = 0.1
             local dynamicXP = enemyLevel * baseXPFactor
 
@@ -139,12 +137,13 @@ return {
                 })
             end
 
-            ui.showMessage(string.format("Battle Experience gained. (+%.1f XP)", dynamicXP))
+            ui.showMessage(string.format("%s defeated (+%.1f XP)", enemyName, dynamicXP))
         end
     }
 }
 
 -- TODO:
 -- detect player's summons as killers
+-- disabled character levelling rly works?
 -- drain/fortify works?
 -- Heavy armor, medium armor and spear are governed by strength
