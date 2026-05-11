@@ -1,4 +1,4 @@
-local DEBUG = false
+local DEBUG = true
 
 local nearby = require('openmw.nearby')
 local types = require('openmw.types')
@@ -35,7 +35,8 @@ end
 return {
     eventHandlers = {
         Died = function()
-            if DEBUG then print("[BattleExp] Died fired") end
+            local enemyName = getEnemyName(self.object)
+            if DEBUG then print(string.format("[BattleExp] Died fired for %s", tostring(enemyName))) end
             if not lastAttacker then
                 if DEBUG then print("[BattleExp] No lastAttacker!") end
                 return
@@ -45,15 +46,14 @@ return {
                 return
             end
             local isPlayer = types.Player.objectIsInstance(lastAttacker)
-            if DEBUG then print(string.format("[BattleExp] isPlayer: %s", tostring(isPlayer))) end
+            if DEBUG then print(string.format("[BattleExp] Killer isPlayer: %s", tostring(isPlayer))) end
             local isAlly = not isPlayer and isPlayerAlly(lastAttacker)
-            if DEBUG then print(string.format("[BattleExp] isAlly: %s", tostring(isAlly))) end
+            if DEBUG then print(string.format("[BattleExp] Killer isAlly: %s", tostring(isAlly))) end
             if not isPlayer and not isAlly then
-                if DEBUG then print("[BattleExp] Not player or ally, skipping") end
+                if DEBUG then print("[BattleExp] Killer is not player or ally, skipping") end
                 return
             end
             local enemyLevel = types.Actor.stats.level(self.object).current
-            local enemyName = getEnemyName(self.object)
             local payload = { level = enemyLevel, name = enemyName }
             if isPlayer then
                 lastAttacker:sendEvent('GrantEnduranceReward', payload)

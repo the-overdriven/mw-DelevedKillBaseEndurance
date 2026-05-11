@@ -1,4 +1,9 @@
-local DEBUG = false
+local DEBUG = true
+
+-- useful commands for testing:
+-- reloadlua
+-- luap / exit()
+-- I.SkillFramework.skillLevelUp("battle_experience")
 
 local ui = require('openmw.ui')
 local I = require('openmw.interfaces')
@@ -23,6 +28,26 @@ SF.registerSkill(skillId, {
         [useTypes.Kill] = 0.1 -- Amount of XP gained per kill (default)
     }
 })
+
+-- Curve up the progression
+-- progression 25->26 is ~4.18x slower than 5->6
+-- progression 49->50 is ~8.26x slower than 5->6
+local function getScaledXP(currentSkillLevel, xp)
+    local oldSkillProgressionFormula = currentSkillLevel + 1
+    local newSkillProgressionFormula = currentSkillLevel * currentSkillLevel / 10 + 1
+    local scale = oldSkillProgressionFormula / newSkillProgressionFormula
+
+    if DEBUG then
+        print(string.format(
+            "[BattleExp] currentSkillLevel: %.2f, xp: %.2f, xp scaled: %.2f, ", 
+            currentSkillLevel, 
+            xp,
+            xp * scale
+        ))
+    end
+
+    return xp * scale
+end
 
 -- Initialize the skill to a base level of 5 if it's currently 0 or nil
 -- This ensures the UI progress bar math calculates properly
@@ -79,9 +104,6 @@ return {
         onActive = function()
             setHealthFromEndurance()
         end,
-        onSleepFinished = function()
-            setHealthFromEndurance()
-        end,
     },
     eventHandlers = {
         UiModeChanged = function(data)
@@ -93,8 +115,7 @@ return {
         GrantEnduranceReward = function(data)
             local enemyLevel = data and data.level or 1
             local enemyName = data and data.name
-            local baseXPFactor = 0.1
-            local dynamicXP = enemyLevel * baseXPFactor
+            local baseExpFactor = 0.1
 
             local stat = SF.getSkillStat(skillId)
             local reqForCurentLevel = SF.getSkillProgressRequirement(skillId)
@@ -104,9 +125,13 @@ return {
 
             local xpNeededToLevelUp = reqForCurentLevel - currentProgress
 
+            if DEBUG then print(string.format("[BattleExp] defeated %s", tostring(enemyName))) end
             if DEBUG then print(string.format("[BattleExp] xpNeededToLevelUp %s", tostring(xpNeededToLevelUp))) end
 
-            if dynamicXP >= xpNeededToLevelUp then
+            local proportionalExp = enemyLevel * baseExpFactor
+            local proportionalExpScaled = getScaledXP(stat.base, proportionalExp)
+
+            if proportionalExpScaled >= xpNeededToLevelUp then
                 local levelBefore = SF.getSkillStat(skillId).base
 
                 -- add until level up
@@ -116,7 +141,7 @@ return {
                 })
                 
                 -- carryover surplus XP
-                local surplusXP = dynamicXP - xpNeededToLevelUp
+                local surplusXP = proportionalExpScaled - xpNeededToLevelUp
                 if surplusXP > 0 then
                     SF.skillUsed(skillId, {
                         skillGain = surplusXP,
@@ -132,18 +157,19 @@ return {
             else
                 -- no skill level up
                 SF.skillUsed(skillId, {
-                    skillGain = dynamicXP,
+                    skillGain = proportionalExpScaled,
                     useType = useTypes.Kill
                 })
             end
 
-            ui.showMessage(string.format("%s defeated (+%.1f XP)", enemyName, dynamicXP))
+            ui.showMessage(string.format("%s defeated (+%.1f XP)", enemyName, proportionalExp))
         end
     }
 }
 
 -- TODO:
--- detect player's summons as killers
+-- detect player's summons as killers - even possible?
+
+-- check:
 -- disabled character levelling rly works?
--- drain/fortify works?
--- Heavy armor, medium armor and spear are governed by strength
+-- attribute grow?
