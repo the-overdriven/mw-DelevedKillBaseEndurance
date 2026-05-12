@@ -1,2 +1,3 @@
+MENU: scripts/BattleExp/menu.lua
 PLAYER: scripts/BattleExp/player.lua
 NPC, CREATURE: scripts/BattleExp/enemy.lua

@@ -1,4 +1,4 @@
-local DEBUG = false
+local DEBUG = true
 
 -- useful commands for testing:
 -- reloadlua
@@ -10,6 +10,8 @@ local I = require('openmw.interfaces')
 local types = require('openmw.types')
 local selfObj = require('openmw.self')
 local SF = require('openmw.interfaces').SkillFramework
+local storage = require('openmw.storage')
+local settings = storage.playerSection('BattleExpSettings')
 
 if not SF then
   error('[BattleExp] Skill Framework is not loaded! Make sure it is installed and enabled.')
@@ -37,16 +39,23 @@ local function getScaledXP(currentSkillLevel, xp)
   local newSkillProgressionFormula = currentSkillLevel * currentSkillLevel / 10 + 1
   local scale = oldSkillProgressionFormula / newSkillProgressionFormula
 
+  local scaledExp = xp * scale
+
+  local userScale = math.min(math.max(settings:get('userBattleExpScale'), 1), 1000) / 100
+
+  local userScaledExp = scaledExp * userScale
+
   if DEBUG then
     print(string.format(
-      '[BattleExp] currentSkillLevel: %s, xp: %.2f, xp scaled: %.2f', 
+      '[BattleExp] currentSkillLevel: %s, xp: %.2f, scaledExp: %.4f, userScaledExp: %.4f',
       currentSkillLevel, 
       xp,
-      xp * scale
+      scaledExp,
+      userScaledExp
     ))
   end
 
-  return xp * scale
+  return userScaledExp
 end
 
 -- Initialize the skill to a base level of 5 if it's currently 0 or nil
@@ -86,14 +95,43 @@ end
 local API = require('openmw.interfaces').StatsWindow
 local C = API.Constants
 API.modifyLine(C.DefaultLines.LEVEL, {
-  visibleFn = function() return false end,
+  visibleFn = function()
+    return not settings:get('hideLevel')
+  end,
 })
 
 -- prevent leveling up character
 local SP = require('openmw.interfaces').SkillProgression
 SP.addSkillLevelUpHandler(function(skillId, source, options)
-  options.levelUpProgress = 0
+  if settings:get('disableLevel') then
+    options.levelUpProgress = 0
+  end
 end)
+
+local function trimZeros(numStr)
+  numStr = numStr:gsub("(%..-)0+$", "%1")
+  numStr = numStr:gsub("%.$", "")
+  return numStr
+end
+
+local function formatDisplayedExp(xp)
+  local abs = math.abs(xp)
+  local num
+
+  if xp % 1 == 0 then
+    num = string.format("%.0f", xp)
+  elseif abs >= 10 then
+    num = string.format("%.1f", xp)
+  elseif abs >= 1 then
+    num = string.format("%.2f", xp)
+  elseif abs >= 0.01 then
+    num = string.format("%.3f", xp)
+  else
+    num = string.format("%.4f", xp)
+  end
+
+  return trimZeros(num)
+end
 
 return {
   engineHandlers = {
@@ -124,7 +162,6 @@ return {
 
       local xpNeededToLevelUp = reqForCurentLevel - currentProgress
 
-      if DEBUG then print(string.format('[BattleExp] defeated %s', tostring(enemyName))) end
       if DEBUG then print(string.format('[BattleExp] xpNeededToLevelUp %s', tostring(xpNeededToLevelUp))) end
 
       local proportionalExp = enemyLevel * baseExpFactor
@@ -161,7 +198,11 @@ return {
         })
       end
 
-      ui.showMessage(string.format('%s defeated (+%.1f XP)', enemyName, proportionalExp))
+      if settings:get('showXpNotifications') then
+        local xpToDisplay = settings:get('showScaledXp') and proportionalExpScaled or proportionalExp
+        local xpToDisplayFormatted = formatDisplayedExp(xpToDisplay)
+        ui.showMessage(string.format('%s defeated (+%s XP)', enemyName, xpToDisplayFormatted))
+      end
     end
   }
 }

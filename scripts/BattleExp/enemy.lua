@@ -1,4 +1,4 @@
-local DEBUG = false
+local DEBUG = true
 
 local nearby = require('openmw.nearby')
 local types = require('openmw.types')
