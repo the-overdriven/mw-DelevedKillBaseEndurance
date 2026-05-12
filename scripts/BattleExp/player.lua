@@ -11,16 +11,16 @@ local types = require('openmw.types')
 local selfObj = require('openmw.self')
 local SF = require('openmw.interfaces').SkillFramework
 local storage = require('openmw.storage')
-local settings = storage.playerSection('BattleExpSettings')
+local settings = storage.playerSection('SettingsBattleExp')
 
 if not SF then
   error('[BattleExp] Skill Framework is not loaded! Make sure it is installed and enabled.')
 end
 
-local skillId = 'battle_experience'
+local skillIdBattleExp = 'battle_experience'
 local useTypes = { Kill = 1 }
 
-SF.registerSkill(skillId, {
+SF.registerSkill(skillIdBattleExp, {
   name = 'Battle Experience',
   description = 'Hard-earned combat experience, forged in the ashes of slain foes.',
   icon = { fgr = 'icons/k/Attribute_Endurance.dds' },
@@ -31,10 +31,12 @@ SF.registerSkill(skillId, {
   }
 })
 
+local statBattleExp = SF.getSkillStat(skillIdBattleExp)
+
 -- Curve up the progression
 -- progression 25->26 is ~4.18x slower than 5->6
 -- progression 49->50 is ~8.26x slower than 5->6
-local function getScaledXP(currentSkillLevel, xp)
+local function getScaledExp(currentSkillLevel, xp)
   local oldSkillProgressionFormula = currentSkillLevel + 1
   local newSkillProgressionFormula = currentSkillLevel * currentSkillLevel / 10 + 1
   local scale = oldSkillProgressionFormula / newSkillProgressionFormula
@@ -47,7 +49,7 @@ local function getScaledXP(currentSkillLevel, xp)
 
   if DEBUG then
     print(string.format(
-      '[BattleExp] currentSkillLevel: %s, xp: %.2f, scaledExp: %.4f, userScaledExp: %.4f',
+      '[BattleExp] XP scaling. currentSkillLevel: %s, xp: %.2f, scaledExp: %.4f, userScaledExp: %.4f',
       currentSkillLevel, 
       xp,
       scaledExp,
@@ -60,7 +62,7 @@ end
 
 -- Initialize the skill to a base level of 5 if it's currently 0 or nil
 -- This ensures the UI progress bar math calculates properly
-local skillStat = SF.getSkillStat(skillId)
+local skillStat = SF.getSkillStat(skillIdBattleExp)
 if skillStat and (skillStat.base == nil or skillStat.base < 5) then
   skillStat.base = 5
 end
@@ -100,11 +102,29 @@ API.modifyLine(C.DefaultLines.LEVEL, {
   end,
 })
 
--- prevent leveling up character
+local meleeSkills = {
+  axe = true, bluntweapon = true, longblade = true, 
+  shortblade = true, spear = true, marksman = true
+}
+
 local SP = require('openmw.interfaces').SkillProgression
 SP.addSkillLevelUpHandler(function(skillId, source, options)
+  -- prevent leveling up character  
   if settings:get('disableLevel') then
     options.levelUpProgress = 0
+  end
+end)
+
+-- reward melee fighters with small bonus for every hit
+SP.addSkillUsedHandler(function(skillId, source)
+  if meleeSkills[skillId] and settings:get('rewardMelee') then
+    local meleeBonusExp = getScaledExp(statBattleExp.base, 0.01)
+    if DEBUG then print('[BattleExp] Rewarded Melee use! %s', meleeBonusExp) end
+
+    SF.skillUsed(skillIdBattleExp, {
+      skillGain = meleeBonusExp,
+      useType = useTypes.Kill
+    })
   end
 end)
 
@@ -154,10 +174,9 @@ return {
       local enemyName = data and data.name
       local baseExpFactor = 0.1
 
-      local stat = SF.getSkillStat(skillId)
-      local reqForCurentLevel = SF.getSkillProgressRequirement(skillId)
+      local reqForCurentLevel = SF.getSkillProgressRequirement(skillIdBattleExp)
 
-      local currentProgressPercent = stat.progress or 0
+      local currentProgressPercent = statBattleExp.progress or 0
       local currentProgress = currentProgressPercent * reqForCurentLevel
 
       local xpNeededToLevelUp = reqForCurentLevel - currentProgress
@@ -165,13 +184,13 @@ return {
       if DEBUG then print(string.format('[BattleExp] xpNeededToLevelUp %s', tostring(xpNeededToLevelUp))) end
 
       local proportionalExp = enemyLevel * baseExpFactor
-      local proportionalExpScaled = getScaledXP(stat.base, proportionalExp)
+      local proportionalExpScaled = getScaledExp(statBattleExp.base, proportionalExp)
 
       if proportionalExpScaled >= xpNeededToLevelUp then
-        local levelBefore = SF.getSkillStat(skillId).base
+        local levelBefore = SF.getSkillStat(skillIdBattleExp).base
 
         -- add until level up
-        SF.skillUsed(skillId, {
+        SF.skillUsed(skillIdBattleExp, {
           skillGain = xpNeededToLevelUp,
           useType = useTypes.Kill
         })
@@ -179,20 +198,20 @@ return {
         -- carryover surplus XP
         local surplusXP = proportionalExpScaled - xpNeededToLevelUp
         if surplusXP > 0 then
-          SF.skillUsed(skillId, {
+          SF.skillUsed(skillIdBattleExp, {
             skillGain = surplusXP,
             useType = useTypes.Kill
           })
         end
 
-        local levelAfter = SF.getSkillStat(skillId).base
+        local levelAfter = SF.getSkillStat(skillIdBattleExp).base
         local levelsGained = levelAfter - levelBefore
 
         growEndurance(levelsGained) -- +1 Endurance per skill level gained
         setHealthFromEndurance()
       else
         -- no skill level up
-        SF.skillUsed(skillId, {
+        SF.skillUsed(skillIdBattleExp, {
           skillGain = proportionalExpScaled,
           useType = useTypes.Kill
         })

@@ -8,7 +8,7 @@ I.Settings.registerPage({
 })
 
 I.Settings.registerGroup({
-    key              = 'BattleExpSettings',
+    key              = 'SettingsBattleExp',
     page             = 'BattleExp',
     l10n             = 'BattleExp',
     name             = 'Customize your experience',
@@ -51,6 +51,13 @@ I.Settings.registerGroup({
             name        = 'Show scaled XP in "defeated" notifications',
             description = 'Displays scaled XP in the "defeated" notifications (affected by your Battle Experience level and custom scale).',
             default     = false,
+        },
+        {
+            key         = 'rewardMelee',
+            renderer    = 'checkbox',
+            name        = 'Reward melee combat',
+            description = 'Grants small XP bonus to Battle Experience for using melee weapons.',
+            default     = true,
         },
     },
 })
