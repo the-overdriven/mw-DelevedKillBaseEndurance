@@ -49,7 +49,7 @@ I.Settings.registerGroup({
             key         = 'showScaledXp',
             renderer    = 'checkbox',
             name        = 'Show scaled XP in "defeated" notifications',
-            description = 'Displays scaled XP in the "defeated" notifications (affected by your Battle Experience level and custom scale).',
+            description = 'Scaled XP is affected by your Battle Experience level and custom scale, base XP depends only on enemy lvl',
             default     = false,
         },
         {

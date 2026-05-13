@@ -1,4 +1,4 @@
-local DEBUG = true
+local DEBUG = false
 
 -- useful commands for testing:
 -- reloadlua
