@@ -59,5 +59,12 @@ I.Settings.registerGroup({
             description = 'Grants small XP bonus to Battle Experience for using melee weapons.',
             default     = true,
         },
+        {
+            key         = 'synergicTraining',
+            renderer    = 'checkbox',
+            name        = 'Synergic training',
+            description = 'Training with any melee weapon slightly improves proficiency with all others.',
+            default     = false,
+        },
     },
 })

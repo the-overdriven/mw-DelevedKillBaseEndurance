@@ -8,7 +8,7 @@ local DEBUG = true
 local ui = require('openmw.ui')
 local I = require('openmw.interfaces')
 local types = require('openmw.types')
-local selfObj = require('openmw.self')
+local player = require('openmw.self')
 local SF = require('openmw.interfaces').SkillFramework
 local storage = require('openmw.storage')
 local settings = storage.playerSection('SettingsBattleExp')
@@ -68,7 +68,7 @@ if skillStat and (skillStat.base == nil or skillStat.base < 5) then
 end
 
 local function growEndurance(amount)
-  local endurance = types.Actor.stats.attributes.endurance(selfObj)
+  local endurance = types.Actor.stats.attributes.endurance(player)
   local newVal = endurance.base + amount
   endurance.base = newVal
   if DEBUG then print(string.format('[BattleExp] Endurance increased to %d', newVal)) end
@@ -85,10 +85,10 @@ end
 
 local function setHealthFromEndurance()
   local types = require('openmw.types')
-  local selfObj = require('openmw.self')
-  local e = types.Actor.stats.attributes.endurance(selfObj).base
+  local player = require('openmw.self')
+  local e = types.Actor.stats.attributes.endurance(player).base
   local newMaxHP = calcMaxHP(e)
-  local health = types.Actor.stats.dynamic.health(selfObj)
+  local health = types.Actor.stats.dynamic.health(player)
   health.base = newMaxHP
   -- if DEBUG then print(string.format('[BattleExp] Endurance=%d -> MaxHP=%.1f', e, newMaxHP)) end
 end
@@ -103,8 +103,11 @@ API.modifyLine(C.DefaultLines.LEVEL, {
 })
 
 local meleeSkills = {
-  axe = true, bluntweapon = true, longblade = true, 
-  shortblade = true, spear = true, marksman = true
+  axe = true, 
+  bluntweapon = true, 
+  longblade = true, 
+  shortblade = true, 
+  spear = true
 }
 
 local SP = require('openmw.interfaces').SkillProgression
@@ -115,9 +118,11 @@ SP.addSkillLevelUpHandler(function(skillId, source, options)
   end
 end)
 
--- reward melee fighters with small bonus for every hit
 SP.addSkillUsedHandler(function(skillId, source)
-  if meleeSkills[skillId] and settings:get('rewardMelee') then
+  if not meleeSkills[skillId] then return end
+
+  -- reward melee fighters with small bonus for every hit  
+  if settings:get('rewardMelee') then
     local meleeBonusExp = getScaledExp(statBattleExp.base, 0.01)
     if DEBUG then print('[BattleExp] Rewarded Melee use! %s', meleeBonusExp) end
 
@@ -125,6 +130,17 @@ SP.addSkillUsedHandler(function(skillId, source)
       skillGain = meleeBonusExp,
       useType = useTypes.Kill
     })
+  end
+
+  -- reward all other melee skills for using a melee skill
+  if settings:get('synergicTraining') then
+    for otherSkillId, _ in pairs(meleeSkills) do
+      if otherSkillId ~= skillId then
+        -- if DEBUG then print(string.format('[BattleExp] synergically training: %s', otherSkillId)) end
+        local stat = types.NPC.stats.skills[otherSkillId](player)
+        stat.progress = stat.progress + 0.01
+      end
+    end
   end
 end)
 
