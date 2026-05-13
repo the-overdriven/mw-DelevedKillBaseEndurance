@@ -124,8 +124,7 @@ SP.addSkillUsedHandler(function(skillId, source)
   -- reward melee fighters with small bonus for every hit  
   if settings:get('rewardMelee') then
     local meleeBonusExp = getScaledExp(statBattleExp.base, 0.01)
-    if DEBUG then print('[BattleExp] Rewarded Melee use! %s', meleeBonusExp) end
-
+    if DEBUG then print('[BattleExp] Rewarded Melee use!', meleeBonusExp) end
     SF.skillUsed(skillIdBattleExp, {
       skillGain = meleeBonusExp,
       useType = useTypes.Kill
@@ -136,9 +135,28 @@ SP.addSkillUsedHandler(function(skillId, source)
   if settings:get('synergicTraining') then
     for otherSkillId, _ in pairs(meleeSkills) do
       if otherSkillId ~= skillId then
-        -- if DEBUG then print(string.format('[BattleExp] synergically training: %s', otherSkillId)) end
-        local stat = types.NPC.stats.skills[otherSkillId](player)
-        stat.progress = stat.progress + 0.01
+        local otherSkill = types.NPC.stats.skills[otherSkillId](player)
+        local otherSkillLevel = otherSkill.base
+
+        if otherSkillLevel >= 50 then return end
+
+        -- Level 5: 0.05 (5%)
+        -- Level 6: 0.0347 (3.5%)
+        -- Level 10: 0.0125 (1.25%)
+        -- Level 25: 0.002 (0.2%)
+        -- Level 49: ≈ 0.00052 (0.05%)
+        local synergicExpProgressBonus = 0.05 * (5 / otherSkillLevel) ^ 2
+
+        if DEBUG then print(string.format('[BattleExp] synergically training: %s (level: %s, progress: %s, bonus: %s)', otherSkillId, otherSkillLevel, otherSkill.progress, synergicExpProgressBonus)) end
+
+        if otherSkill.progress + synergicExpProgressBonus >= 1 then
+          -- granting xp would trigger a level up
+          otherSkill.base = otherSkillLevel + 1
+          otherSkill.progress = 0 -- reset progress after level up
+        else
+          -- we can't use SP.skillUsed because we don't want infinite loop
+          otherSkill.progress = otherSkill.progress + synergicExpProgressBonus
+        end
       end
     end
   end
