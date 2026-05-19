@@ -348,4 +348,3 @@ return {
 -- TODO:
 -- detect player's summons as killers - even possible?
 -- level armor while moving (like MWSE Armor Training)
--- what about spell scrolls?
