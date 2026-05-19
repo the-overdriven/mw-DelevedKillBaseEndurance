@@ -1,10 +1,8 @@
 local DEBUG = true
-
 local nearby = require('openmw.nearby')
 local types = require('openmw.types')
 local self = require('openmw.self')
 local I = require('openmw.interfaces')
-
 local lastAttacker = nil
 
 I.Combat.addOnHitHandler(function(attack)
@@ -36,8 +34,18 @@ return {
   eventHandlers = {
     Died = function()
       local enemyName = getEnemyName(self.object)
+      local enemyLevel = types.Actor.stats.level(self.object).current
+      local payload = { level = enemyLevel, name = enemyName }
       if DEBUG then print(string.format('[BattleExp] "Died" event fired for %s', tostring(enemyName))) end
+
       if not lastAttacker then
+        -- killer is unknown, maybe magic was used?
+        for _, actor in ipairs(nearby.actors) do
+          if types.Player.objectIsInstance(actor) then
+            actor:sendEvent('GrantBattleExpConditionally', payload)
+            break
+          end
+        end
         if DEBUG then print('[BattleExp] No lastAttacker!') end
         return
       end
@@ -53,8 +61,7 @@ return {
         if DEBUG then print('[BattleExp] Killer is not player or ally, skipping...') end
         return
       end
-      local enemyLevel = types.Actor.stats.level(self.object).current
-      local payload = { level = enemyLevel, name = enemyName }
+      
       if isKillerPlayer then
         lastAttacker:sendEvent('GrantBattleExp', payload)
       else

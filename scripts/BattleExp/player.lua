@@ -1,4 +1,4 @@
-local DEBUG = false
+local DEBUG = true
 
 -- useful commands for testing:
 -- reloadlua
@@ -19,6 +19,7 @@ end
 
 local skillIdBattleExp = 'battle_experience'
 local useTypes = { Kill = 1 }
+timeLastDestructiveMagicUse = 0 -- os.time() of last Destruction or Enchant skill XP gain
 
 SF.registerSkill(skillIdBattleExp, {
   name = 'Battle Experience',
@@ -110,6 +111,13 @@ local meleeSkills = {
   spear = true
 }
 
+-- Magic schools that indicate the player may have caused a kill using magic.
+-- Destruction covers direct damage spells; enchant covers enchanted item usage.
+local magicKillSkills = {
+  destruction = true,
+  enchant = true,
+}
+
 local SP = require('openmw.interfaces').SkillProgression
 SP.addSkillLevelUpHandler(function(skillId, source, options)
   -- prevent leveling up character  
@@ -119,6 +127,18 @@ SP.addSkillLevelUpHandler(function(skillId, source, options)
 end)
 
 SP.addSkillUsedHandler(function(skillId, source)
+  -- Track Destruction and Enchant XP gains as a proxy for player-caused magic damage.
+  -- When an enemy dies with an unknown killer, we check these timestamps to decide
+  -- whether the player was likely responsible (within the last 60 seconds).
+  if skillId == 'destruction' or skillId == 'enchant' then
+    local timeNow = os.time()
+    timeLastDestructiveMagicUse = timeNow
+    if DEBUG then
+      -- ui.showMessage(string.format('[BattleExp] %s XP gained at t=%d', skillId, timeNow))
+      print(string.format('[BattleExp] Destructive skill used (%s), timestamp: %d', skillId, timeNow)) 
+    end
+  end
+
   if not meleeSkills[skillId] then return end
 
   -- reward melee fighters with small bonus for every hit  
@@ -187,6 +207,61 @@ local function formatDisplayedExp(xp)
   return trimZeros(num)
 end
 
+local function GrantBattleExp(data)
+  local enemyLevel = data and data.level or 1
+  local enemyName = data and data.name
+  local baseExpFactor = 0.1
+
+  local reqForCurentLevel = SF.getSkillProgressRequirement(skillIdBattleExp)
+
+  local currentProgressPercent = statBattleExp.progress or 0
+  local currentProgress = currentProgressPercent * reqForCurentLevel
+
+  local xpNeededToLevelUp = reqForCurentLevel - currentProgress
+
+  if DEBUG then print(string.format('[BattleExp] xpNeededToLevelUp %s', tostring(xpNeededToLevelUp))) end
+
+  local proportionalExp = enemyLevel * baseExpFactor
+  local proportionalExpScaled = getScaledExp(statBattleExp.base, proportionalExp)
+
+  if proportionalExpScaled >= xpNeededToLevelUp then
+    local levelBefore = SF.getSkillStat(skillIdBattleExp).base
+
+    -- add until level up
+    SF.skillUsed(skillIdBattleExp, {
+      skillGain = xpNeededToLevelUp,
+      useType = useTypes.Kill
+    })
+    
+    -- carryover surplus XP
+    local surplusXP = proportionalExpScaled - xpNeededToLevelUp
+    if surplusXP > 0 then
+      SF.skillUsed(skillIdBattleExp, {
+        skillGain = surplusXP,
+        useType = useTypes.Kill
+      })
+    end
+
+    local levelAfter = SF.getSkillStat(skillIdBattleExp).base
+    local levelsGained = levelAfter - levelBefore
+
+    growEndurance(levelsGained) -- +1 Endurance per skill level gained
+    setHealthFromEndurance()
+  else
+    -- no skill level up
+    SF.skillUsed(skillIdBattleExp, {
+      skillGain = proportionalExpScaled,
+      useType = useTypes.Kill
+    })
+  end
+
+  if settings:get('showXpNotifications') then
+    local xpToDisplay = settings:get('showScaledXp') and proportionalExpScaled or proportionalExp
+    local xpToDisplayFormatted = formatDisplayedExp(xpToDisplay)
+    ui.showMessage(string.format('%s defeated (+%s XP)', enemyName, xpToDisplayFormatted))
+  end
+end
+
 return {
   engineHandlers = {
     onLoad = function()
@@ -194,7 +269,7 @@ return {
     end,
     onActive = function()
       setHealthFromEndurance()
-    end,
+    end
   },
   eventHandlers = {
     UiModeChanged = function(data)
@@ -203,60 +278,14 @@ return {
       setHealthFromEndurance()
       end
     end,
-    GrantBattleExp = function(data)
-      local enemyLevel = data and data.level or 1
-      local enemyName = data and data.name
-      local baseExpFactor = 0.1
-
-      local reqForCurentLevel = SF.getSkillProgressRequirement(skillIdBattleExp)
-
-      local currentProgressPercent = statBattleExp.progress or 0
-      local currentProgress = currentProgressPercent * reqForCurentLevel
-
-      local xpNeededToLevelUp = reqForCurentLevel - currentProgress
-
-      if DEBUG then print(string.format('[BattleExp] xpNeededToLevelUp %s', tostring(xpNeededToLevelUp))) end
-
-      local proportionalExp = enemyLevel * baseExpFactor
-      local proportionalExpScaled = getScaledExp(statBattleExp.base, proportionalExp)
-
-      if proportionalExpScaled >= xpNeededToLevelUp then
-        local levelBefore = SF.getSkillStat(skillIdBattleExp).base
-
-        -- add until level up
-        SF.skillUsed(skillIdBattleExp, {
-          skillGain = xpNeededToLevelUp,
-          useType = useTypes.Kill
-        })
-        
-        -- carryover surplus XP
-        local surplusXP = proportionalExpScaled - xpNeededToLevelUp
-        if surplusXP > 0 then
-          SF.skillUsed(skillIdBattleExp, {
-            skillGain = surplusXP,
-            useType = useTypes.Kill
-          })
-        end
-
-        local levelAfter = SF.getSkillStat(skillIdBattleExp).base
-        local levelsGained = levelAfter - levelBefore
-
-        growEndurance(levelsGained) -- +1 Endurance per skill level gained
-        setHealthFromEndurance()
-      else
-        -- no skill level up
-        SF.skillUsed(skillIdBattleExp, {
-          skillGain = proportionalExpScaled,
-          useType = useTypes.Kill
-        })
-      end
-
-      if settings:get('showXpNotifications') then
-        local xpToDisplay = settings:get('showScaledXp') and proportionalExpScaled or proportionalExp
-        local xpToDisplayFormatted = formatDisplayedExp(xpToDisplay)
-        ui.showMessage(string.format('%s defeated (+%s XP)', enemyName, xpToDisplayFormatted))
-      end
-    end
+    GrantBattleExpConditionally = function(data)
+      -- workaround for hit handler not registering magic kills
+      local timeNow = os.time()
+      local hasUsedDestructiveMagicInLastMinute = timeNow - timeLastDestructiveMagicUse < 60
+      if not hasUsedDestructiveMagicInLastMinute then return end
+      GrantBattleExp(data)
+    end,
+    GrantBattleExp = GrantBattleExp,
   }
 }
 
